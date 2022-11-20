@@ -2,10 +2,19 @@ module Main where
 
 import qualified Data.HashMap.Strict as M
 import Data.List (replicate)
+import Data.Maybe (fromJust, fromMaybe)
+
+-- TODO:
+--   - Make basic code for generating balancers. [DONE]
+--   - There seem to be too many solutions (doesn't stop printing) for 2 2 2 as input.
+--     I must have done something wrong, figure out what.
+--   - Make nice printing for balancers.
+--   - Improve all code in this file to be nicer.
+--   - Make logic for testing if balancer is balanced (simulation? analytical?)
 
 main :: IO ()
 main = do
-  let bs = allBalancers 2 2 5
+  let bs = allBalancers 2 2 2
   print bs
 
 type Balancer = M.HashMap ElementName Element
@@ -16,6 +25,14 @@ data Element
   = InputElement !Input
   | SplitterElement !Splitter
   deriving (Show)
+
+fromInputElement :: Element -> Input
+fromInputElement (InputElement input) = input
+fromInputElement _ = error "Not an Input element!"
+
+fromSplitterElement :: Element -> Splitter
+fromSplitterElement (SplitterElement splitter) = splitter
+fromSplitterElement _ = error "Not a Splitter element!"
 
 data Input = Input
   { inputNextElem :: Maybe ElementName
@@ -52,17 +69,55 @@ allBalancers numInputs numOutputs maxNumSplitters =
 
     -- Returns all balancers that can be created by upgrading the given balancer via exactly
     -- one upgrade, where upgrade is adding new splitter or adding a loop.
-    -- TODO:
-    -- Vrati sve sljedece moguce balancere koji se mogu dobiti nadogradnjom na postojeci balancer.
-    -- Kako se radi nadogradnja?
-    -- Imamo dvije moguce radnje:
-    -- 1. Dodajemo novi splitter. One se spaja na jedan ili dva postojeca outputa. (adding new splitter).
-    -- 2. Na postojeci splitter koji ima free input spojimo jedan od postojecih free outputa. (adding a loop).
-    -- Probamo svaki od ovih poteza napraviti, i dobijemo listu balancera.
     nextBalancers :: Balancer -> [Balancer]
     nextBalancers balancer | length (balancerSplitters balancer) == maxNumSplitters = []
-    nextBalancers balancer = [] -- TODO: Vrati nesto smisleno!
-    --
+    nextBalancers balancer =
+      let outputs = balancerOutputs balancer
+          splitters = balancerSplitters balancer
+          possibleSplitterInputs =
+            [ (out1, out2)
+              | out1 <- Nothing : (Just <$> outputs),
+                out2 <- filter ((/= out1) . Just) outputs
+            ]
+          possibleLoops =
+            [ (out, fst splitterWithFreeInput)
+              | out <- outputs,
+                splitterWithFreeInput <- filter (doesSplitterHaveFreeInput . snd) splitters
+            ]
+       in map addSplitterWithInputs possibleSplitterInputs ++ map addLoop possibleLoops
+      where
+        addSplitterWithInputs :: (Maybe Output, Output) -> Balancer
+        addSplitterWithInputs (maybeLeftInput, rightInput) =
+          let maybeLeftInputElementName = outputName <$> maybeLeftInput
+              rightInputElementName = outputName rightInput
+              newSplitter = Splitter maybeLeftInputElementName (Just rightInputElementName) Nothing Nothing
+              newSplitterName = fromMaybe "_" maybeLeftInputElementName ++ "+" ++ rightInputElementName
+              balancer' = M.insert newSplitterName (SplitterElement newSplitter) balancer
+              balancer'' = case maybeLeftInput of
+                Nothing -> balancer'
+                Just leftInput -> connectOutputToSplitter leftInput newSplitterName balancer'
+              balancer''' =
+                connectOutputToSplitter rightInput newSplitterName balancer''
+           in balancer'''
+
+        addLoop :: (Output, ElementName) -> Balancer
+        addLoop (out, splitterName) =
+          connectOutputToSplitter out splitterName balancer
+
+        connectOutputToSplitter output splitterName balancer' =
+          case output of
+            Output inputName InputOutput ->
+              let input = fromInputElement $ fromJust $ M.lookup inputName balancer'
+                  newInput = input {inputNextElem = Just splitterName}
+               in M.insert inputName (InputElement newInput) balancer'
+            Output splitterName splitterOutputType ->
+              let splitter = fromSplitterElement $ fromJust $ M.lookup splitterName balancer'
+                  newSplitter = case splitterOutputType of
+                    LeftSplitterOutput -> splitter {splitterLeftOutput = Just splitterName}
+                    RightSplitterOutput -> splitter {splitterRightOutput = Just splitterName}
+                    InputOutput -> error "impossible"
+               in M.insert splitterName (SplitterElement splitter) balancer'
+
     isBalancerTooBig balancer = length (balancerSplitters balancer) > maxNumSplitters
 
     doesBalancerHaveFinalShape balancer =
@@ -70,7 +125,11 @@ allBalancers numInputs numOutputs maxNumSplitters =
         && length (balancerInputs balancer) == numInputs
 
 balancerInputs :: Balancer -> [(ElementName, Input)]
-balancerInputs balancer = M.toList $ M.mapMaybe toInputElem balancer
+balancerInputs balancer =
+  M.toList $
+    M.mapMaybe
+      toInputElem
+      balancer
   where
     toInputElem e = case e of
       InputElement input -> Just input
@@ -84,11 +143,16 @@ balancerSplitters balancer = M.toList $ M.mapMaybe toSplitterElem balancer
       _ -> Nothing
 
 data Output = Output ElementName OutputType
+  deriving (Eq, Show)
+
+outputName :: Output -> ElementName
+outputName (Output name _) = name
 
 data OutputType
   = LeftSplitterOutput
   | RightSplitterOutput
   | InputOutput
+  deriving (Eq, Show)
 
 splitterOutputs :: (ElementName, Splitter) -> [Output]
 splitterOutputs (name, splitter) = case splitter of
@@ -96,6 +160,12 @@ splitterOutputs (name, splitter) = case splitter of
   (Splitter _ _ (Just _) Nothing) -> [Output name RightSplitterOutput]
   (Splitter _ _ Nothing (Just _)) -> [Output name LeftSplitterOutput]
   (Splitter _ _ (Just _) (Just _)) -> []
+
+doesSplitterHaveFreeInput :: Splitter -> Bool
+doesSplitterHaveFreeInput splitter = case splitter of
+  (Splitter Nothing _ _ _) -> True
+  (Splitter _ Nothing _ _) -> True
+  otherwise -> False
 
 inputOutputs :: (ElementName, Input) -> [Output]
 inputOutputs (name, input) = case input of
