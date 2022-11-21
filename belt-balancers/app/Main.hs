@@ -7,9 +7,30 @@ import Debug.Trace (trace)
 
 -- TODO:
 --   - Make basic code for generating balancers. [DONE]
---   - Add possibility to have loops. Check comment in the code.
+--   - Add possibility to have loops in balancers. Check comment in the code.
 --   - Improve all code in this file to be nicer.
 --   - Make logic for testing if balancer is balanced (simulation? analytical?)
+--     I think we want to do analytical approach.
+--     What we need to do is define a set of linear equations that we can then
+--     solve to figure out how the balancer is working and if its outputs
+--     are balanced.
+--     I found this library, it is probably a good fit: https://hackage.haskell.org/package/mfsolve .
+--     The basic idea:
+--     - define each input as a constant: A, B, C, ... .
+--     - for each splitter, assign a new variable to its output (both of them), and define question where we express
+--       that variable via its inputs. So if inputs are A and B, and we just named splitter's outputs x,
+--       we would have following equation: 2*x = A+B .
+--     - Once we have all these equations, we want to calculate the value of outputs of the balancer.
+--       So we should solve those! For example if outputs of balancer are really outputs of splitter
+--       whose outputs we named with y, then we want to solve y (and for other outputs similarly).
+--     - By solving the outputs, we will get them expressed via inputs, via A, B, C, ... .
+--       Now, how can we figure out if they are balanced? Well, for each output, we can check if it
+--       equals 1/num_outputs * (A + B + ...). If it does, that output is balanced! And if they are
+--       all balanced, then our balancer is working!
+--     - Fun: We could also try and look for balancers that are not perfectly balanced, but are balanced
+--       pretty well. Maybe there are such balancers, that are significanly simpler then the perfect one,
+--       which would make them interesting in practice. I am not sure how to define that yet, I guess
+--       we could check that it is close to 1/num_outputs * (A + B + ...), and not exactly the same.
 
 main :: IO ()
 main = do
