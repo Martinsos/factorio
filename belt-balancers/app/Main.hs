@@ -31,10 +31,12 @@ import Debug.Trace (trace)
 --       pretty well. Maybe there are such balancers, that are significanly simpler then the perfect one,
 --       which would make them interesting in practice. I am not sure how to define that yet, I guess
 --       we could check that it is close to 1/num_outputs * (A + B + ...), and not exactly the same.
+--   - Interesting question is how we can reduce search space. Maybe we can do genetic algorithm?
+--     And we use our equation solving to say how close is the balancer to being balanced?
 
 main :: IO ()
 main = do
-  let bs = allBalancers 2 2 2
+  let bs = allBalancers 3 3 3
   mapM_ (putStrLn . prettyShowBalancer) bs
 
 type Balancer = M.HashMap ElementName Element
